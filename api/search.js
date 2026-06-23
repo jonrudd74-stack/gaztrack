@@ -3,6 +3,15 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
 
+  // Debug mode: fetch a single notice by ID to inspect its full structure
+  if (req.query.noticeId) {
+    const url = `https://www.thegazette.co.uk/id/notice/${req.query.noticeId}?format=application/json`;
+    const r = await fetch(url, { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } });
+    const text = await r.text();
+    try { return res.status(200).json(JSON.parse(text)); }
+    catch(e) { return res.status(200).send(text); }
+  }
+
   const { company, liquidator, from, to, pageSize = 50 } = req.query;
 
   // 2442 = CVL Appointment of Liquidator
