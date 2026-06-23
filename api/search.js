@@ -5,11 +5,13 @@ export default async function handler(req, res) {
 
   const { company, liquidator, from, to, pageSize = 50 } = req.query;
 
-  // Use the Gazette's dedicated insolvency search endpoint
-  // notice-type 2120 = Appointment of Liquidator (CVL)
+  // CVL-related notice codes:
+  // 2442 = Appointment of Liquidator (CVL)
+  // 2444 = Appointment of Liquidator (MVL)
+  // 2441 = Notice of intention to appoint
+  // We fetch without notice-type filter and filter ourselves since the API ignores it
   const params = new URLSearchParams({
     'results-page-size': pageSize,
-    'notice-type': '2120',
     'start-publish-date': from,
     'end-publish-date': to,
     'format': 'application/json'
@@ -46,16 +48,30 @@ export default async function handler(req, res) {
     const allEntries = data['entry'] || [];
     const total = data['f:total'] || allEntries.length;
 
-    const sampleCodes = allEntries.slice(0, 5).map(n => ({
+    // Filter to appointment of liquidator notices only
+    // 2442 = CVL appointment, 2444 = MVL appointment, 2421 = compulsory appointment
+    const APPOINTMENT_CODES = new Set(['2442','2444','2421','2422']);
+    const entries = allEntries.filter(n => APPOINTMENT_CODES.has(String(n['f:notice-code'] || '')));
+
+    const sampleCodes = allEntries.slice(0, 10).map(n => ({
       code: n['f:notice-code'],
       title: String(n['title']?.['#text'] || n['title'] || '').substring(0, 80)
     }));
 
-    const parsed = allEntries.map(n => parseNotice(n));
+    const parsed = entries.map(n => parseNotice(n));
+
+    // Also client-filter by company/liquidator name if provided
+    const filtered = parsed.filter(n => {
+      if (company && !n.company.toLowerCase().includes(company.toLowerCase()) &&
+          !n.raw.toLowerCase().includes(company.toLowerCase())) return false;
+      if (liquidator && !n.liquidator.toLowerCase().includes(liquidator.toLowerCase()) &&
+          !n.raw.toLowerCase().includes(liquidator.toLowerCase())) return false;
+      return true;
+    });
 
     res.status(200).json({
-      total, notices: parsed,
-      debug: { url, status: response.status, entryCount: allEntries.length, sampleCodes }
+      total, notices: filtered,
+      debug: { url, status: response.status, entryCount: allEntries.length, afterCodeFilter: entries.length, afterNameFilter: filtered.length, sampleCodes }
     });
 
   } catch (err) {
