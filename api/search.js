@@ -3,19 +3,15 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
 
-  const { company, liquidator, from, to, pageSize = 50 } = req.query;
+  const { company, liquidator, from, to, pageSize = 100 } = req.query;
 
-  // Build search query
+  // Search specifically for insolvency notices with liquidator terms
   let q = 'appointment of liquidator';
   if (company) q += ' ' + company;
   if (liquidator) q += ' ' + liquidator;
 
-  // category-code=I2 = Insolvency notices only
-  // notice-type=2120 = Appointment of Liquidator specifically
   const params = new URLSearchParams({
     'results-page-size': pageSize,
-    'category-code': 'I2',
-    'notice-type': '2120',
     'start-publish-date': from,
     'end-publish-date': to,
     'q': q,
@@ -42,11 +38,24 @@ export default async function handler(req, res) {
     try { data = JSON.parse(text); }
     catch(e) { return res.status(500).json({ error: 'Could not parse response', detail: text.substring(0, 300) }); }
 
-    const notices = data['entry'] || [];
-    const total = data['f:total'] || notices.length;
+    const allEntries = data['entry'] || [];
+    const total = data['f:total'] || allEntries.length;
 
-    const parsed = notices.map(n => {
-      const rawHtml = n['summary'] || n['content'] || n['f:body'] || '';
+    // Filter to insolvency/liquidation notices only by notice code or content keywords
+    const insolvencyKeywords = /appointment of liquidator|creditors voluntary|winding.up|liquidat/i;
+    const insolvencyCodes = ['2120','2121','2122','2130','2140','2150','2160','2170','2180','2190','2200'];
+
+    const entries = allEntries.filter(n => {
+      const code = String(n['f:notice-code'] || '');
+      const title = String(n['title']?.['#text'] || n['title'] || '');
+      const content = stripHtml(n['content'] || n['summary'] || '');
+      return insolvencyCodes.includes(code)
+        || insolvencyKeywords.test(title)
+        || insolvencyKeywords.test(content);
+    });
+
+    const parsed = entries.map(n => {
+      const rawHtml = n['content'] || n['summary'] || n['f:body'] || '';
       const plain = stripHtml(rawHtml);
       const title = typeof n['title'] === 'string' ? n['title'] : (n['title']?.['#text'] || '');
       const combined = (plain + ' ' + title).trim();
@@ -57,6 +66,7 @@ export default async function handler(req, res) {
 
       return {
         id: String(n['id'] || '').split('/').pop(),
+        noticeCode: n['f:notice-code'] || '—',
         company: n['f:company-name'] || extractCompany(combined, title) || '—',
         liquidator: n['f:person-name'] || extractLiquidator(combined) || '—',
         firm: n['f:organisation-name'] || extractFirm(combined) || '—',
@@ -66,8 +76,24 @@ export default async function handler(req, res) {
       };
     });
 
-    res.status(200).json({ total, notices: parsed,
-      debug: { url, status: response.status, entryCount: notices.length, sampleKeys: notices[0] ? Object.keys(notices[0]) : [] }
+    // Log sample notice codes to help debug
+    const sampleCodes = allEntries.slice(0, 10).map(n => ({
+      code: n['f:notice-code'],
+      title: typeof n['title'] === 'string' ? n['title'].substring(0,60) : (n['title']?.['#text'] || '').substring(0,60)
+    }));
+
+    res.status(200).json({
+      total,
+      filteredCount: parsed.length,
+      notices: parsed,
+      debug: {
+        url,
+        status: response.status,
+        totalFromApi: total,
+        entriesReturned: allEntries.length,
+        afterFilter: parsed.length,
+        sampleCodes
+      }
     });
 
   } catch (err) {
@@ -77,14 +103,13 @@ export default async function handler(req, res) {
 }
 
 function stripHtml(html) {
-  return html
+  return String(html)
     .replace(/<[^>]+>/g, ' ')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
     .replace(/\s+/g, ' ').trim();
 }
 
 function extractCompany(text, title) {
-  // Try title first — often "Company Name - Appointment of Liquidator"
   if (title) {
     const t = title.replace(/[-–—].*$/, '').trim();
     if (t.match(/Ltd|Limited|LLP|PLC|plc/i)) return t;
