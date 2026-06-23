@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>London Gazette — Insolvency Tracker</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f4f5f7; color: #222; min-height: 100vh; }
+  header { background: #1a1a2e; color: white; padding: 18px 24px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header p { font-size: 12px; opacity: 0.65; margin-top: 2px; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+  .card { background: white; border-radius: 12px; border: 1px solid #e5e7eb; padding: 20px; margin-bottom: 20px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media(max-width:600px){ .form-grid, .date-row, .metric-grid { grid-template-columns: 1fr !important; } }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group label { font-size: 12px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.4px; }
+  .form-group input, .form-group select { padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; background: white; transition: border 0.2s; }
+  .form-group input:focus, .form-group select:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+  .date-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 14px; }
+  .custom-dates { display: none; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .custom-dates.visible { display: grid; }
+  .btn-primary { width: 100%; margin-top: 16px; padding: 11px; background: #4f46e5; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+  .btn-primary:hover { background: #4338ca; }
+  .btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+  .btn-sm { padding: 6px 14px; font-size: 12px; background: white; border: 1px solid #d1d5db; color: #555; border-radius: 6px; cursor: pointer; }
+  .btn-sm:hover { background: #f3f4f6; }
+  .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+  .metric { background: #f5f3ff; border-radius: 10px; padding: 14px 16px; }
+  .metric-val { font-size: 28px; font-weight: 700; color: #4f46e5; }
+  .metric-lbl { font-size: 12px; color: #666; margin-top: 2px; }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid #e5e7eb; margin-bottom: 16px; }
+  .tab { padding: 9px 18px; font-size: 13px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; color: #777; transition: all 0.15s; }
+  .tab.active { border-bottom-color: #4f46e5; color: #4f46e5; }
+  .results-list { display: flex; flex-direction: column; gap: 10px; }
+  .result-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; transition: border 0.15s; }
+  .result-item:hover { border-color: #c7d2fe; }
+  .result-item .company { font-weight: 600; font-size: 14px; color: #1a1a2e; }
+  .result-item .meta { font-size: 12px; color: #666; margin-top: 6px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #ede9fe; color: #5b21b6; }
+  .notice-link { color: #4f46e5; text-decoration: none; font-size: 12px; }
+  .notice-link:hover { text-decoration: underline; }
+  .league-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .league-table th { text-align: left; padding: 10px 12px; font-weight: 600; color: #444; border-bottom: 2px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .league-table td { padding: 11px 12px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+  .league-table tr:last-child td { border-bottom: none; }
+  .league-table tr:hover td { background: #fafafa; }
+  .rank { font-weight: 700; color: #4f46e5; font-size: 16px; }
+  .rank-1 { color: #f59e0b; }
+  .rank-2 { color: #9ca3af; }
+  .rank-3 { color: #b45309; }
+  .bar-wrap { background: #f3f4f6; border-radius: 4px; height: 8px; width: 120px; }
+  .bar-fill { height: 8px; border-radius: 4px; background: linear-gradient(90deg, #4f46e5, #7c3aed); }
+  .empty { text-align: center; padding: 50px 20px; color: #aaa; font-size: 14px; }
+  .loading { text-align: center; padding: 40px; color: #666; font-size: 14px; }
+  .spinner { display: inline-block; width: 22px; height: 22px; border: 2px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-msg { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 14px 16px; color: #b91c1c; font-size: 13px; }
+  .pct { font-size: 11px; color: #999; min-width: 30px; }
+  .raw-toggle { font-size: 11px; color: #4f46e5; cursor: pointer; }
+  .raw-text { font-size: 11px; color: #888; margin-top: 6px; font-family: monospace; background: #f9fafb; padding: 6px 8px; border-radius: 4px; display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🏛️ London Gazette — Insolvency Tracker</h1>
+    <p>Appointment of Liquidator notices · CVL League Table</p>
+  </div>
+</header>
+
+<div class="container">
+  <div class="card">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Company name</label>
+        <input type="text" id="companyName" placeholder="e.g. Acme Ltd" />
+      </div>
+      <div class="form-group">
+        <label>Appointed liquidator name</label>
+        <input type="text" id="liquidatorName" placeholder="e.g. John Smith" />
+      </div>
+    </div>
+
+    <div class="date-row">
+      <div class="form-group">
+        <label>Date range</label>
+        <select id="dateRange" onchange="toggleCustomDates()">
+          <option value="5">Past 5 days</option>
+          <option value="14">Past 2 weeks</option>
+          <option value="28" selected>Past 4 weeks</option>
+          <option value="90">Past 3 months</option>
+          <option value="180">Past 6 months</option>
+          <option value="365">Past 12 months</option>
+          <option value="custom">Custom range…</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Results per page</label>
+        <select id="pageSize">
+          <option value="20">20</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Sort notices by</label>
+        <select id="sortBy">
+          <option value="date-desc">Newest first</option>
+          <option value="date-asc">Oldest first</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="custom-dates" id="customDates">
+      <div class="form-group">
+        <label>From date</label>
+        <input type="date" id="dateFrom" />
+      </div>
+      <div class="form-group">
+        <label>To date</label>
+        <input type="date" id="dateTo" />
+      </div>
+    </div>
+
+    <button class="btn-primary" id="searchBtn" onclick="doSearch()">Search London Gazette</button>
+  </div>
+
+  <div class="card" id="resultsCard" style="display:none;">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
+      <div class="tabs" style="margin-bottom:0; border:none;">
+        <div class="tab active" id="tab-notices" onclick="switchTab('notices')">Notices</div>
+        <div class="tab" id="tab-league" onclick="switchTab('league')">League Table</div>
+      </div>
+      <button class="btn-sm" onclick="clearResults()">Clear results</button>
+    </div>
+
+    <div id="metricsRow" class="metric-grid" style="display:none;">
+      <div class="metric"><div class="metric-val" id="mTotal">0</div><div class="metric-lbl">Total notices found</div></div>
+      <div class="metric"><div class="metric-val" id="mFirms">0</div><div class="metric-lbl">Unique firms</div></div>
+      <div class="metric"><div class="metric-val" id="mLiquidators">0</div><div class="metric-lbl">Unique liquidators</div></div>
+    </div>
+
+    <div id="noticesTab">
+      <div id="noticesList"></div>
+    </div>
+    <div id="leagueTab" style="display:none;">
+      <div id="leagueContent"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let allNotices = [];
+let leagueData = {};
+let currentTab = 'notices';
+
+function toggleCustomDates() {
+  const v = document.getElementById('dateRange').value;
+  document.getElementById('customDates').className = 'custom-dates' + (v === 'custom' ? ' visible' : '');
+}
+
+function getDateRange() {
+  const v = document.getElementById('dateRange').value;
+  const to = new Date();
+  let from = new Date();
+  if (v === 'custom') {
+    return { from: document.getElementById('dateFrom').value, to: document.getElementById('dateTo').value };
+  }
+  from.setDate(from.getDate() - parseInt(v));
+  return { from: fmt(from), to: fmt(to) };
+}
+
+function fmt(d) { return d.toISOString().split('T')[0]; }
+
+function formatDate(str) {
+  if (!str) return '—';
+  return new Date(str).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  ['notices','league'].forEach(t => {
+    document.getElementById('tab-' + t).className = 'tab' + (t === tab ? ' active' : '');
+    document.getElementById(t + 'Tab').style.display = t === tab ? '' : 'none';
+  });
+  if (tab === 'league') renderLeague();
+}
+
+function clearResults() {
+  allNotices = [];
+  leagueData = {};
+  document.getElementById('resultsCard').style.display = 'none';
+}
+
+async function doSearch() {
+  const company = document.getElementById('companyName').value.trim();
+  const liquidator = document.getElementById('liquidatorName').value.trim();
+
+  if (!company && !liquidator) {
+    alert('Please enter a company name or liquidator name.');
+    return;
+  }
+
+  const btn = document.getElementById('searchBtn');
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+
+  const dates = getDateRange();
+  const pageSize = document.getElementById('pageSize').value;
+
+  document.getElementById('resultsCard').style.display = '';
+  document.getElementById('metricsRow').style.display = 'none';
+  document.getElementById('noticesList').innerHTML = '<div class="loading"><span class="spinner"></span>Fetching notices from London Gazette…</div>';
+  switchTab('notices');
+
+  try {
+    const params = new URLSearchParams({ from: dates.from, to: dates.to, pageSize });
+    if (company) params.append('company', company);
+    if (liquidator) params.append('liquidator', liquidator);
+
+    const res = await fetch('/api/search?' + params);
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    allNotices = data.notices || [];
+    renderNotices(allNotices);
+    buildLeague(allNotices);
+    updateMetrics(allNotices, data.total);
+  } catch (e) {
+    document.getElementById('noticesList').innerHTML = `<div class="error-msg">⚠️ Error: ${e.message}. Please try again or check your search terms.</div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Search London Gazette';
+}
+
+function renderNotices(notices) {
+  const el = document.getElementById('noticesList');
+  if (!notices.length) { el.innerHTML = '<div class="empty">No notices found. Try broadening your search or date range.</div>'; return; }
+  const sort = document.getElementById('sortBy').value;
+  const sorted = [...notices].sort((a, b) => sort === 'date-asc' ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
+  el.innerHTML = '<div class="results-list">' + sorted.map((n, i) => `
+    <div class="result-item">
+      <div class="company">${esc(n.company)}</div>
+      <div class="meta">
+        <span>📅 ${formatDate(n.date)}</span>
+        ${n.liquidator !== '—' ? `<span>👤 ${esc(n.liquidator)}</span>` : ''}
+        ${n.firm !== '—' ? `<span>🏢 ${esc(n.firm)}</span>` : ''}
+        <span class="badge">Appointment of Liquidator</span>
+        <a class="notice-link" href="${esc(n.url)}" target="_blank">View notice →</a>
+        ${n.raw ? `<span class="raw-toggle" onclick="toggleRaw(${i})">show raw ▾</span>` : ''}
+      </div>
+      ${n.raw ? `<div class="raw-text" id="raw-${i}">${esc(n.raw)}</div>` : ''}
+    </div>`).join('') + '</div>';
+  document.getElementById('metricsRow').style.display = 'grid';
+}
+
+function toggleRaw(i) {
+  const el = document.getElementById('raw-' + i);
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
+
+function buildLeague(notices) {
+  leagueData = {};
+  notices.forEach(n => {
+    const key = (n.firm !== '—' ? n.firm : null) || (n.liquidator !== '—' ? n.liquidator : 'Unknown');
+    if (!leagueData[key]) leagueData[key] = { firm: key, count: 0, liquidators: new Set(), companies: new Set() };
+    leagueData[key].count++;
+    if (n.liquidator !== '—') leagueData[key].liquidators.add(n.liquidator);
+    leagueData[key].companies.add(n.company);
+  });
+}
+
+function renderLeague() {
+  const el = document.getElementById('leagueContent');
+  const rows = Object.values(leagueData).sort((a, b) => b.count - a.count);
+  if (!rows.length) { el.innerHTML = '<div class="empty">No data yet — run a search first.</div>'; return; }
+  const max = rows[0].count;
+  const total = rows.reduce((s, r) => s + r.count, 0);
+  el.innerHTML = `
+    <table class="league-table">
+      <thead><tr>
+        <th style="width:44px;">#</th>
+        <th>Firm / Liquidator</th>
+        <th style="width:70px;text-align:center;">Appts</th>
+        <th>Volume</th>
+        <th style="width:90px;text-align:center;">Liquidators</th>
+        <th style="width:90px;text-align:center;">Companies</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map((r, i) => {
+          const rankClass = i === 0 ? 'rank rank-1' : i === 1 ? 'rank rank-2' : i === 2 ? 'rank rank-3' : 'rank';
+          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
+          return `<tr>
+            <td><span class="${rankClass}">${medal || (i+1)}</span></td>
+            <td style="font-weight:500;">${esc(r.firm)}</td>
+            <td style="text-align:center;font-weight:700;color:#4f46e5;">${r.count}</td>
+            <td><div style="display:flex;align-items:center;gap:8px;">
+              <div class="bar-wrap"><div class="bar-fill" style="width:${Math.round((r.count/max)*100)}%"></div></div>
+              <span class="pct">${Math.round((r.count/total)*100)}%</span>
+            </div></td>
+            <td style="text-align:center;color:#666;">${r.liquidators.size}</td>
+            <td style="text-align:center;color:#666;">${r.companies.size}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+function updateMetrics(notices, total) {
+  document.getElementById('mTotal').textContent = total || notices.length;
+  const firms = new Set(notices.map(n => n.firm !== '—' ? n.firm : null).filter(Boolean));
+  document.getElementById('mFirms').textContent = firms.size || '—';
+  const liqs = new Set(notices.map(n => n.liquidator !== '—' ? n.liquidator : null).filter(Boolean));
+  document.getElementById('mLiquidators').textContent = liqs.size || '—';
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+</body>
+</html>
