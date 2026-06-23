@@ -14,9 +14,9 @@ export default async function handler(req, res) {
 
   const { company, liquidator, from, to, pageSize = 50 } = req.query;
 
-  // 2442 = CVL Appointment of Liquidator
-  // 2444 = MVL Appointment of Liquidator
-  const APPOINTMENT_CODES = new Set(['2442', '2444']);
+  // 2443 = Appointment of Liquidators (CVL/MVL)
+  // 2442 = Notice of meeting (pre-appointment)
+  const APPOINTMENT_CODES = new Set(['2443']);
 
   try {
     // Fetch multiple pages to get enough appointment notices
