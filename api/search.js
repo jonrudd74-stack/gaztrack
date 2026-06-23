@@ -44,37 +44,39 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Could not parse Gazette response', detail: text.substring(0, 300) });
     }
 
-    // The Gazette API can return notices under several keys
-    const notices =
-      data['_embedded']?.['gazette-notice'] ||
-      data['_embedded']?.['notices'] ||
-      data['notices'] ||
-      data['results'] ||
-      [];
+    // Gazette returns an Atom-style feed: notices are under 'entry', total under 'f:total'
+    const notices = data['entry'] || [];
+    const total = data['f:total'] || notices.length;
 
-    console.log('Notices found:', notices.length, 'Total:', data['total']);
+    console.log('Notices found:', notices.length, 'Total:', total);
 
     const parsed = notices.map(n => {
-      const desc = n['description'] || n['notice-description'] || n['body'] || '';
-      const title = n['title'] || n['subject'] || '';
+      const desc = n['summary'] || n['content'] || n['f:body'] || '';
+      const title = n['title'] || '';
       const combined = (desc + ' ' + title).trim();
 
+      // Notice ID and URL from 'id' field (a URL) or 'link'
+      const noticeUrl = n['id'] || (Array.isArray(n['link'])
+        ? n['link'].find(l => l['@_rel'] === 'alternate')?.['@_href']
+        : n['link']) || '#';
+
+      const noticeId = noticeUrl.split('/').pop();
+
       return {
-        id: n['notice-id'] || n['id'] || '',
-        company: n['company-name'] || extractCompany(combined) || '—',
-        liquidator: extractLiquidator(combined) || '—',
-        firm: extractFirm(combined) || '—',
-        date: n['publish-date'] || n['published-date'] || n['date'] || '',
-        url: n['_links']?.self?.href
-          || (n['notice-id'] ? 'https://www.thegazette.co.uk/notice/' + n['notice-id'] : '#'),
+        id: noticeId,
+        company: n['f:company-name'] || extractCompany(combined) || '—',
+        liquidator: n['f:person-name'] || extractLiquidator(combined) || '—',
+        firm: n['f:organisation-name'] || extractFirm(combined) || '—',
+        date: n['published'] || n['updated'] || '',
+        url: noticeUrl.startsWith('http') ? noticeUrl : 'https://www.thegazette.co.uk/notice/' + noticeId,
         raw: combined.substring(0, 400)
       };
     });
 
     res.status(200).json({
-      total: data['total'] || data['totalResults'] || parsed.length,
+      total,
       notices: parsed,
-      debug: { url, status: response.status, keys: Object.keys(data) }
+      debug: { url, status: response.status, keys: Object.keys(data), entryCount: notices.length }
     });
 
   } catch (err) {
